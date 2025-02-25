@@ -4,32 +4,35 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"testing/fstest"
 )
 
-type testCase[T comparable] struct {
+type SimpleStruct struct {
+	Str  string `env:"STR"`
+	Int  int    `env:"INT"`
+	Bool bool   `env:"BOL"`
+}
+
+type TestCase[T comparable] struct {
 	name    string
 	env     map[string]string
+	fs      fstest.MapFS
 	want    T
 	wantErr bool
 }
 
-func TestYadsscSimpleStruct(t *testing.T) {
-	type Struct struct {
-		Str  string `env:"STR"`
-		Int  int    `env:"INT"`
-		Bool bool   `env:"BOL"`
-	}
-	tests := []testCase[Struct]{
+func Test_LoadSimpleStruct(t *testing.T) {
+	tests := []TestCase[SimpleStruct]{
 		{
 			name: "no env",
-			want: Struct{},
+			want: SimpleStruct{},
 		},
 		{
 			name: "string env",
 			env: map[string]string{
 				"STR": "Hello",
 			},
-			want: Struct{
+			want: SimpleStruct{
 				Str: "Hello",
 			},
 		},
@@ -38,7 +41,7 @@ func TestYadsscSimpleStruct(t *testing.T) {
 			env: map[string]string{
 				"INT": "1",
 			},
-			want: Struct{
+			want: SimpleStruct{
 				Int: 1,
 			},
 		},
@@ -54,7 +57,7 @@ func TestYadsscSimpleStruct(t *testing.T) {
 			env: map[string]string{
 				"BOL": "true",
 			},
-			want: Struct{
+			want: SimpleStruct{
 				Bool: true,
 			},
 		},
@@ -65,6 +68,51 @@ func TestYadsscSimpleStruct(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "all of them together",
+			env: map[string]string{
+				"STR": "YADSEC",
+				"BOL": "1",
+				"INT": "512",
+			},
+			want: SimpleStruct{
+				Str:  "YADSEC",
+				Int:  512,
+				Bool: true,
+			},
+		},
+		{
+			name: "VAR, VAR__FILE and VAR__SECRET is mutually exlucive",
+			env: map[string]string{
+				"STR":         "hello",
+				"STR__FILE":   "/hello",
+				"STR__SECRET": "",
+			},
+			fs: fstest.MapFS{
+				"/hello":                  {Data: []byte("hello")},
+				defaultSecretsDir + "STR": {Data: []byte("hello")},
+			},
+			wantErr: true,
+		},
+		{
+			name: "string file should fail if file not there",
+			env: map[string]string{
+				"STR__FILE": "/notthere",
+			},
+			wantErr: true,
+		},
+		{
+			name: "string from file",
+			env: map[string]string{
+				"STR__FILE": "hello",
+			},
+			fs: fstest.MapFS{
+				"hello": {Data: []byte("hello")},
+			},
+			want: SimpleStruct{
+				Str: "hello",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -72,20 +120,59 @@ func TestYadsscSimpleStruct(t *testing.T) {
 	}
 }
 
-func performTest[T comparable](tc testCase[T]) func(*testing.T) {
+func performTest[T comparable](tc TestCase[T]) func(*testing.T) {
 	return func(t *testing.T) {
 		for key, value := range tc.env {
 			os.Setenv(key, value)
 			defer os.Unsetenv(key) // Clean up environment variables after the test
 		}
 		var got T
-		err := Load(&got)
+		yadsec := Yadsec{
+			fs: tc.fs,
+		}
+		err := yadsec.Load(&got)
 
 		if tc.wantErr && err == nil {
 			t.Errorf("expected an error but got nil")
 		}
+		if !tc.wantErr && err != nil {
+			t.Errorf("did not expect an error, but got one %v", err)
+		}
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("expected %v but got %v", tc.want, got)
 		}
+	}
+}
+
+func Test_mutuallyExclusive(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		values []bool
+		want   bool
+	}{
+		{
+			name:   "one",
+			values: []bool{true},
+			want:   true,
+		},
+		{
+			name:   "good",
+			values: []bool{true, false, false},
+			want:   true,
+		},
+		{
+			name:   "bad",
+			values: []bool{true, false, false, false, true},
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mutuallyExclusive(tt.values...)
+			if tt.want != got {
+				t.Errorf("mutuallyExclusive() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

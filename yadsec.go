@@ -2,16 +2,29 @@ package yadsec
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"reflect"
 	"strconv"
 )
 
-func Load(config any) error {
+const (
+	fileVarSuffix   = "__FILE"
+	secretVarSuffix = "__SECRET"
+)
+
+const (
+	defaultSecretsDir = "/run/secrets/"
+)
+
+type Yadsec struct {
+	fs fs.FS
+}
+
+func (y Yadsec) Load(config any) error {
 	var (
 		val = reflect.ValueOf(config).Elem()
 		typ = reflect.TypeOf(config).Elem()
-		err error
 	)
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -21,7 +34,10 @@ func Load(config any) error {
 			continue
 		}
 
-		envValue := readEnvvar(envKey)
+		envValue, err := y.readEnvvar(envKey)
+		if err != nil {
+			return fmt.Errorf("failed to read variable %s: %v", envKey, err)
+		}
 		if envValue == "" {
 			continue
 		}
@@ -36,8 +52,61 @@ func Load(config any) error {
 	return nil
 }
 
-func readEnvvar(key string) string {
-	return os.Getenv(key)
+func (y Yadsec) readEnvvar(key string) (string, error) {
+	var (
+		file   = fileEnvvar(key)
+		secret = secretEnvvar(key)
+	)
+
+	if !mutuallyExclusive(isEnvSet(key), isEnvSet(file), isEnvSet(secret)) {
+		return "", fmt.Errorf("%s, %s and %s are mutually exclusive", key, file, secret)
+	}
+
+	if isEnvSet(key) {
+		return os.Getenv(key), nil
+	}
+
+	if isEnvSet(file) {
+		path := os.Getenv(file)
+		value, err := y.readFile(path)
+		if err != nil {
+			return "", fmt.Errorf("failed to read %s: %v", file, err)
+		}
+		if value == "" {
+			return "", fmt.Errorf("content is empty %s", file)
+		}
+		return value, err
+	}
+
+	return "", nil
+}
+
+func fileEnvvar(key string) string {
+	return key + fileVarSuffix
+}
+
+func (y Yadsec) readFile(path string) (string, error) {
+	f, err := y.fs.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open %s with error: %v", path, err)
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return "", fmt.Errorf("failed to stat %s with error: %v", path, err)
+	}
+
+	b := make([]byte, stat.Size())
+	_, err = f.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to read %s with error: %v", path, err)
+	}
+	return string(b), nil
+}
+
+func secretEnvvar(key string) string {
+	return key + secretVarSuffix
 }
 
 func parseEnvvar(fieldVal reflect.Value, envValue string, envTag string) error {
@@ -62,4 +131,22 @@ func parseEnvvar(fieldVal reflect.Value, envValue string, envTag string) error {
 	default:
 		return fmt.Errorf("unsupported field type for %s", envTag)
 	}
+}
+
+func isEnvSet(key string) bool {
+	_, set := os.LookupEnv(key)
+	return set
+}
+
+func mutuallyExclusive(values ...bool) bool {
+	count := 0
+	for _, v := range values {
+		if v {
+			count++
+		}
+		if count > 1 {
+			return false
+		}
+	}
+	return count <= 1
 }
