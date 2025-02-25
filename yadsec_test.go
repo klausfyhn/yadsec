@@ -85,19 +85,19 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			name: "VAR, VAR__FILE and VAR__SECRET is mutually exlucive",
 			env: map[string]string{
 				"STR":         "hello",
-				"STR__FILE":   "/hello",
+				"STR__FILE":   "hello",
 				"STR__SECRET": "",
 			},
 			fs: fstest.MapFS{
-				"/hello":                  {Data: []byte("hello")},
-				defaultSecretsDir + "STR": {Data: []byte("hello")},
+				"/hello":            {Data: []byte("hello")},
+				"somewhere" + "STR": {Data: []byte("hello")},
 			},
 			wantErr: true,
 		},
 		{
 			name: "string file should fail if file not there",
 			env: map[string]string{
-				"STR__FILE": "/notthere",
+				"STR__FILE": "notthere",
 			},
 			wantErr: true,
 		},
@@ -108,6 +108,18 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			},
 			fs: fstest.MapFS{
 				"hello": {Data: []byte("hello")},
+			},
+			want: SimpleStruct{
+				Str: "hello",
+			},
+		},
+		{
+			name: "unspecified secret string",
+			env: map[string]string{
+				"STR__SECRET": "",
+			},
+			fs: fstest.MapFS{
+				"secrets/STR": {Data: []byte("hello")},
 			},
 			want: SimpleStruct{
 				Str: "hello",
@@ -128,9 +140,10 @@ func performTest[T comparable](tc TestCase[T]) func(*testing.T) {
 		}
 		var got T
 		yadsec := Yadsec{
-			fs: tc.fs,
+			fs:         tc.fs,
+			secretsDir: "secrets/",
 		}
-		err := yadsec.Load(&got)
+		err := yadsec.load(&got)
 
 		if tc.wantErr && err == nil {
 			t.Errorf("expected an error but got nil")

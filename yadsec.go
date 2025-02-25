@@ -13,15 +13,18 @@ const (
 	secretVarSuffix = "__SECRET"
 )
 
-const (
-	defaultSecretsDir = "/run/secrets/"
-)
-
 type Yadsec struct {
-	fs fs.FS
+	fs         fs.FS
+	secretsDir string
 }
 
-func (y Yadsec) Load(config any) error {
+func Load(config any) error {
+	y := new(Yadsec)
+	y.secretsDir = "/run/secrets/"
+	return y.load(config)
+}
+
+func (y Yadsec) load(config any) error {
 	var (
 		val = reflect.ValueOf(config).Elem()
 		typ = reflect.TypeOf(config).Elem()
@@ -66,7 +69,13 @@ func (y Yadsec) readEnvvar(key string) (string, error) {
 		return os.Getenv(key), nil
 	}
 
+	if isEnvSet(secret) {
+		defer os.Unsetenv(secret)
+		os.Setenv(file, y.secretsDir+key)
+	}
+
 	if isEnvSet(file) {
+		defer os.Unsetenv(file)
 		path := os.Getenv(file)
 		value, err := y.readFile(path)
 		if err != nil {
