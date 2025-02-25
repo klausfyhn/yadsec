@@ -125,6 +125,18 @@ func Test_LoadSimpleStruct(t *testing.T) {
 				Str: "hello",
 			},
 		},
+		{
+			name: "alternate secret name string",
+			env: map[string]string{
+				"STR__SECRET": "hello",
+			},
+			fs: fstest.MapFS{
+				"secrets/hello": {Data: []byte("hello")},
+			},
+			want: SimpleStruct{
+				Str: "hello",
+			},
+		},
 	}
 
 	for _, tt := range tests {

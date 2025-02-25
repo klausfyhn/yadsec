@@ -71,7 +71,15 @@ func (y Yadsec) readEnvvar(key string) (string, error) {
 
 	if isEnvSet(secret) {
 		defer os.Unsetenv(secret)
-		os.Setenv(file, y.secretsDir+key)
+		s := os.Getenv(secret)
+		var secretName string
+		if s == "" {
+			secretName = key
+		} else {
+			secretName = s
+		}
+
+		os.Setenv(file, y.secretsDir+secretName)
 	}
 
 	if isEnvSet(file) {
