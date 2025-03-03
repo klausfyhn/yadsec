@@ -1,3 +1,3 @@
-module github.com/klausfyhn/yadsac
+module github.com/klausfyhn/yadsec
 
 go 1.23.4
