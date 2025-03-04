@@ -7,12 +7,6 @@ import (
 	"testing/fstest"
 )
 
-type SimpleStruct struct {
-	Str  string `env:"STR"`
-	Int  int    `env:"INT"`
-	Bool bool   `env:"BOL"`
-}
-
 type TestCase[T comparable] struct {
 	name    string
 	env     map[string]string
@@ -22,13 +16,18 @@ type TestCase[T comparable] struct {
 }
 
 func Test_LoadSimpleStruct(t *testing.T) {
+	type SimpleStruct struct {
+		Str  string `env:"STR"`
+		Int  int    `env:"INT"`
+		Bool bool   `env:"BOL"`
+	}
 	tests := []TestCase[SimpleStruct]{
 		{
-			name: "no env",
+			name: "no env variables set",
 			want: SimpleStruct{},
 		},
 		{
-			name: "string env",
+			name: "string env variable",
 			env: map[string]string{
 				"STR": "Hello",
 			},
@@ -37,7 +36,7 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			},
 		},
 		{
-			name: "int env",
+			name: "int env variable",
 			env: map[string]string{
 				"INT": "1",
 			},
@@ -46,14 +45,14 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid int",
+			name: "invalid int env variable",
 			env: map[string]string{
 				"INT": "invalid",
 			},
 			wantErr: true,
 		},
 		{
-			name: "bool env",
+			name: "bool env variable",
 			env: map[string]string{
 				"BOL": "true",
 			},
@@ -62,14 +61,14 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid bool",
+			name: "invalid bool env variable",
 			env: map[string]string{
 				"BOL": "invalid",
 			},
 			wantErr: true,
 		},
 		{
-			name: "all of them together",
+			name: "all env variables together",
 			env: map[string]string{
 				"STR": "YADSEC",
 				"BOL": "1",
@@ -82,7 +81,7 @@ func Test_LoadSimpleStruct(t *testing.T) {
 			},
 		},
 		{
-			name: "VAR, VAR__FILE and VAR__SECRET is mutually exlucive",
+			name: "mutually exclusive env variables",
 			env: map[string]string{
 				"STR":         "hello",
 				"STR__FILE":   "hello",
@@ -137,8 +136,48 @@ func Test_LoadSimpleStruct(t *testing.T) {
 				Str: "hello",
 			},
 		},
+		{
+			name: "empty string env variable",
+			env: map[string]string{
+				"STR": "",
+			},
+			want: SimpleStruct{},
+		},
+		{
+			name: "large int env variable",
+			env: map[string]string{
+				"INT": "999999999",
+			},
+			want: SimpleStruct{
+				Int: 999999999,
+			},
+		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, performTest(tt))
+	}
+}
+
+func TestRequiredFields(t *testing.T) {
+	type xyz struct {
+		Required string `env:"REQUIRED,required"`
+	}
+	tests := []TestCase[xyz]{
+		{
+			name:    "required field missing",
+			wantErr: true,
+		},
+		{
+			name: "required field present",
+			env: map[string]string{
+				"REQUIRED": "present",
+			},
+			want: xyz{
+				Required: "present",
+			},
+		},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, performTest(tt))
 	}
@@ -171,32 +210,36 @@ func performTest[T comparable](tc TestCase[T]) func(*testing.T) {
 
 func Test_mutuallyExclusive(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name   string
 		values []bool
 		want   bool
 	}{
 		{
-			name:   "one",
+			name:   "one true value",
 			values: []bool{true},
 			want:   true,
 		},
 		{
-			name:   "good",
+			name:   "one true value among falses",
 			values: []bool{true, false, false},
 			want:   true,
 		},
 		{
-			name:   "bad",
+			name:   "multiple true values",
 			values: []bool{true, false, false, false, true},
 			want:   false,
+		},
+		{
+			name:   "all false values",
+			values: []bool{false, false, false},
+			want:   true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := mutuallyExclusive(tt.values...)
 			if tt.want != got {
-				t.Errorf("mutuallyExclusive() = %v, want %v", got, tt.want)
+				t.Errorf("expected %v but got %v", tt.want, got)
 			}
 		})
 	}

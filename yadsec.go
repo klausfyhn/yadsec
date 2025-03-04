@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -32,17 +33,24 @@ func (y Yadsec) load(config any) error {
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		envKey := field.Tag.Get("env")
-		if envKey == "" {
+		rawKey := field.Tag.Get("env")
+		if rawKey == "" {
 			continue
 		}
+		keys := strings.Split(rawKey, ",")
+
+		envKey := keys[0]
 
 		envValue, err := y.readEnvvar(envKey)
 		if err != nil {
 			return fmt.Errorf("failed to read variable %s: %v", envKey, err)
 		}
 		if envValue == "" {
-			continue
+			if contains("required", keys) {
+				return fmt.Errorf("%s is required", envKey)
+			} else {
+				continue
+			}
 		}
 
 		fieldVal := val.Field(i)
@@ -166,4 +174,13 @@ func mutuallyExclusive(values ...bool) bool {
 		}
 	}
 	return count <= 1
+}
+
+func contains[T comparable](elem T, slice []T) bool {
+	for _, v := range slice {
+		if elem == v {
+			return true
+		}
+	}
+	return false
 }
