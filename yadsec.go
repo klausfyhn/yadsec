@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -142,7 +143,7 @@ func (y Yadsec) readFile(path string) (string, error) {
 	}
 
 	str := string(b)
-	str = strings.TrimSpace(str)
+	str = strings.TrimRight(str, "\r\n")
 
 	return str, nil
 }
@@ -194,10 +195,5 @@ func mutuallyExclusive(values ...bool) bool {
 }
 
 func contains[T comparable](elem T, slice []T) bool {
-	for _, v := range slice {
-		if elem == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, elem)
 }
