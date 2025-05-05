@@ -140,7 +140,11 @@ func (y Yadsec) readFile(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read %s with error: %v", path, err)
 	}
-	return string(b), nil
+
+	str := string(b)
+	str = strings.TrimSpace(str)
+
+	return str, nil
 }
 
 func secretEnvvar(key string) string {
