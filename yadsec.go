@@ -31,7 +31,7 @@ func (y Yadsec) load(config any) error {
 		typ = reflect.TypeOf(config).Elem()
 	)
 
-	for i := 0; i < typ.NumField(); i++ {
+	for i := range typ.NumField() {
 		field := typ.Field(i)
 		rawKey := field.Tag.Get("env")
 		if rawKey == "" {
@@ -111,7 +111,20 @@ func fileEnvvar(key string) string {
 }
 
 func (y Yadsec) readFile(path string) (string, error) {
-	f, err := y.fs.Open(path)
+	var fd fs.FS
+	if y.fs != nil {
+		fd = y.fs
+	} else {
+		fd = os.DirFS("/")
+	}
+
+	path = strings.TrimPrefix(path, "/")
+
+	if !fs.ValidPath(path) {
+		return "", fmt.Errorf("invalid path %s", path)
+	}
+
+	f, err := fd.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to open %s with error: %v", path, err)
 	}
